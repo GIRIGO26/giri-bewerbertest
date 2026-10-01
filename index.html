@@ -15,6 +15,7 @@
     --err: #DC2626; --bg: #fff; --card: #fff;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; background: var(--bg); color: var(--g800); font-family: Montserrat, system-ui, sans-serif; }
   body { -webkit-user-select: none; user-select: none; }
   textarea, input { -webkit-user-select: text; user-select: text; }
@@ -77,6 +78,10 @@
   .watch { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 54px); z-index: 4; display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; background: var(--blue-xl); color: var(--navy); font-size: 13px; font-weight: 500; padding: 8px 16px; border-bottom: 1px solid var(--blue-l); }
   .watch.alert { background: #FEF2F2; color: #991B1B; border-bottom-color: #FCA5A5; }
   .leaves { font-weight: 700; white-space: nowrap; }
+  .lang { display: flex; border: 1.5px solid rgba(255,255,255,.35); border-radius: 8px; overflow: hidden; }
+  .lang button { border: 0; background: transparent; color: #fff; font: inherit; font-size: 13px; font-weight: 600; padding: 6px 10px; cursor: pointer; opacity: .7; }
+  .lang button.on { background: #fff; color: var(--navy); opacity: 1; }
+  .lang button:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; }
   .done { text-align: center; padding: 40px 10px; }
   .done .big { font-size: 56px; color: var(--mint); }
   .warnbox { background: #FFF7ED; border: 1px solid #FDBA74; color: #7C2D12; border-radius: 10px; padding: 10px 14px; font-size: 14px; }
@@ -90,12 +95,17 @@
 </head>
 <body>
 <header>
-  <div class="logo">GIRI<span>.</span> <span class="lt">Bewerbertest</span></div>
-  <div class="hdr-right"><span id="section"></span><span id="timer" class="timer" hidden></span></div>
+  <div class="logo">GIRI<span>.</span> <span class="lt" id="brand">Bewerbertest</span></div>
+  <div class="hdr-right">
+    <span id="section"></span><span id="timer" class="timer" hidden></span>
+    <div class="lang" id="lang" role="group" aria-label="Sprache / Language">
+      <button data-l="de" class="on">DE</button><button data-l="en">EN</button>
+    </div>
+  </div>
 </header>
 <div class="progress"><div id="bar"></div></div>
 <div id="watch" class="watch" hidden>
-  <span>👁 Das Verlassen des Testfensters wird registriert.</span>
+  <span id="watchText"></span>
   <span id="leaves" class="leaves" hidden></span>
 </div>
 <main id="app"></main>
@@ -104,17 +114,98 @@
 // ---------- Konfiguration ----------
 const CONFIG = {
   WEBHOOK_URL: "https://hook.eu2.make.com/b4cju3whg4qif44n17nwhq427tmqo6rn",   // Make-Webhook, wird beim Build eingesetzt
+  KEY: "Schnitt2026",                   // fester Schlüssel gegen Fremd-Aufrufe, Bewerber sieht ihn nicht
   COG_SECONDS: 15 * 60,
   CONTENT_SECONDS: 10 * 60,
 };
-// Fragen, mit dem Test-Code verschlüsselt (AES-GCM, Schlüssel per PBKDF2 aus dem Code). Ohne Code nicht lesbar.
-const ENC_BANK = {"salt":"AXy01f/J+1hzRGOUsuZHyA==","iv":"sYwy9fvPZPTgXOeI","iter":250000,"data":"aHZ1ALuL11Cc7O0kFx3HCXkLVA2ekWl+AibbXrUoPIyJY2Cx+Qkxaws5ah7n0W+HnEpM7Z30LO81ICv+S8M5laiu85XbUvbr/I5SczrIMkPTsjp1TktTNdrNrI+JgCVMAMSpzh4F7vCfPnvy987RpaQn9CsWwBeRqSEujnDjUWxcoFFIScugcHZO9QuFwtcfJAyZLbbE/50W3o2Dvbay8qXJFFMSyKnKZJL7IW1KmagNELiNWhvLLrMX9taUmBnrsQeMLMQj+EF1ULmY3ow7CbMPaydio6Tfu8i0Xcze7P8rNIi+MhDk3WVnv5Dj5HZfGvTQF4eZ3gRtOUY0NWnIpND3NyBqh8TJ8iR/a3pDj41US40s30S61LCgm6lAB2uzJa5Tlm+rgsAnQfxeWA7W9kP4Z9hkbMCnzDBEzQFM4ezkJvjirSGxrwZaDRMq2o+p6Z4DHWDoTMroEkiFtPUAGXI2D2ESlrRviaoP+6WndqhAXimqDLPBoFTNbDaROdc4R8n723+zYMYWyQ6Ty4WjRDXoho4f7XgGXvrcVD0SvvOqpWD/NIrHV2nkNh5m7kxdDXsRDJktcpySPamdQTomd0LvdmFKkpheFD2+BTNM+xjfyFtwKhAZbBSpNgSpbWZuUOhQTZ1ykqxrqD+gSgwSAwWX52xSfFugmRBZUOU3v7/YiCqfLwzLd/7QCT2V49MHvyaRdsBRS+ILS1Lx/IDnVAdGw7IoBJ3yOWsKynZvb1WIsDci3IJwrgZvlkR5K93mMNoIzFDRlGxSD7oyjzTqNV/xgPjB1odjn9hRIu6ZQyuCnroWqsXutQEtjVZERHGK1gRnQ80h41B3owjlMhJ2AQjUYo5ghs+6l+o7zvXwpWA8e2VhSmnLMSR0YtrtaDBxrS2P23dwkR2ztkjMHdS37YJGUCTr2QFTS2c3LhIjkGsxT4XLJQfhElqsOTRAN6NjhAxdNA1r/psjIgLMFYg2oN9809hHcE7A7EzNp6hqqarQV8Ywz3zpihcNcoQqmCqksTS22x3YN/c9k90n5w7em3RV+tW4f3abCtVdvskW6LojMHaSfc8KOn0N7L6EQhsIsxiVWpugUqaZnWbOBcWtB/lAHEV+ARKQ3XI15J3Qisi1Q9Z7Lr5DAsgKC/wkS4447hctSgTSIpI4oPWrODEdGKSgilCkarn/A4OWAI5H8Nd6cAnBDexOiIHwkUGVNfdIL1kwZ8A11LT/zM8sS4J4hZF/PcOpC4MUewK1jMVANLVnjAjASA7AFS5vI8GwYEvKdFhLoa9MhS7V6sLTbJMJ3Qf5IxgmO7ZH0E5P84znye19nC4jJNECSVYTO4vyR67f74lMigt9zSjGG6SKp1Np4f3c+cAdXj75E+MkTX05Fd66QlCULMewfGqHtM69prkd7n6veDTaEKalJDvB4SyuuSRB2BRll0NbMMSAwryX/j3BpTJGS5/v239S4yb2xYsGEoxWEtc1f70DHF7jKuxszYJ+BD+SLu20xF+wWW+v711y3HoZZ49DEHzofNW/pCRlD+VyAtQWxqep53ropMci78xci3MAUSRAyD91ztQF1vwaZUbF8kkSDY7Xv4eq5rWW6mpzJWpFbIpnFfBUHpppjVOC9DwXXAZsW0yC9vi4NLq5PMTtFfqxZzJ6+gcp3jyHQUf00jw/jFzCSPHiMMrE+DAV7v/LZulw6vd5Ofo0Jsj3JalCX3eehnf8KsuvA3UkUcXAhipgQVY6c7UB7zyx6Ick/KBW1FlJggNfu4B0FwLl4cwqPrsg5efxFmmhrimWwqFJU4k+NL+dbhY39OA/NzJYtL5z/wKC8JNLhuIg2cIzYdM16pvjBUroaqLBHK0C8YOUzW7KSlzr9frLOnduy2YvUctzp/NQgHzIcSxJoKFrXBUwzh+WXo9oOpRxzAKTzMBWOoAoPsgy7jEeOSstnDk1Aisgqqq7AS/gHKVN03tax6RWXwEXitj38pA0jQTvAgf7CMHw0DTySv2D8ETqxvPsuFpW+w6bYt1JsSGxjn/EJMzco0FO/SFssf++7n0JLMlZ9sl/sHfsD6Cvb2Tc2FXwOnZ0cX3i6qlJ+xFNpfC3q9qnKnkACWVX5XFaOWWYeZFnjhwC3D9Y6eUYnIfKQJqYOfSY+70DOdHjjokhAr7yd3xtOGp+0Kw+njMVlI111/2nGMk3ukumTuSbeLCvauEb0DH/gd7zCBgrhI/fY+uNllkFZWlfQKzQfv1ODWdzrpusHKTeQrWlKue54dfuejd+dzBeyYZtQu7upcOeKq3MArdgJPxY1euUEg6Ac4Gssep2HnBTBZ3oR/noj3CSI7DPhNkGH3W8HNlSoMbsyKq8jicOyf4etgHaEyZOuBF/VIme0zQMG0kgQrTqnWOWwNvbbPnjL1tjOQ9ZEx4lLcOt+fYxvt3+IrldjYc2goDsqjBxYl+C9C6rafTxOf+BS5v/FWLIneqLibSBKR1FUA6axIVnV6EtsvNKIWiJEwULx4WmoTTXErph7amNuMS3/Jp53MnIMigtoHiIpVGdbU8XteSUDO/4fTtrjkF4Gq5COxToCTk22hOioVyivE6usOH/V8imie/GszkHu2ktNnZIRCLm1bJ6tVV4OUyEiwE4TqwOLyGWn1tl4to1NnBUPoBQiOzCBjvhTxf8PX/EioPxB2mmOZ6riMvg5gG1kWoaYuVbyg3IN2nNGepnsLEuJGDjd9N5O/DKboXfLdYI1CGgmyDnp+5+WmTA5XfkwZ+LykFRTCwMKjfpKl/CoTvyzkFImnBTXsLYAHxd/eNj1KcrWc9vQ2mqW7TNBoYSIACzfSJx7QrNlQdqDggsWQDc2WVAjATv5+nDEmyUqwW6eJxWHn0NxIskhEMQvm4U+KKHEgCgFgKhQzEQ6c6n7f/FhIcwn8mS7zvUk2WO8kBbPpa1v0EaoBivNidWFEz8NSoIMPrQgj4erUPoIPp5lt+SQMG5pwzqg4xB5QabHSW+qB5f/iMK7RhLWRpJux0fC9uQ8xz7M+Q0tcGa5iHKLbvtwqqRQFxFyIW1izF9O1AKdpzMLDBzIlVvz3TYp3AVW3/HpU1ZgS4az7dRvuCLz/zgs0pjf10XR/3ThW/B726bQV5XIC3202wYGSJ5ZaCfA3/MihU34fZVZREHzvnOHAKzMD2zhOwDDLO4lwSxz0LgCgUXo5TphqItTDBkPcl0hdepXCrataZO76b6T6xJzUsBSr8qEukBdGF6ZQkZqdQgXhB/2TIXzJW+gC3oyIuOI+79INO9DBt/Y7c+u/9ADkGwGs6c4Iyud8I5Z91YRhQqAVJ19Tz+Yi+nDK/NxnmSm0Gcx+DnMVIS83qomW4SIrzOrJZO7Z5VtbieRqK7sos1nxkUr+WJgCe0Z38jzN2FM1PA9QYBiJFALNGH3ZQwakXCPVUgW61CxEwBVKUjyQw4bo4GfMH97IwoW/Pss+QyJo2m0VV2wBMWpWZinkhX0OWH7fHA/Xea2hEDfMQmnwUgK+7buaQnPeUpMhPp1ASFOmdLVLb72wOjpZT+qI1q6q0iG/Ao2J1b83msk49vt9rPbhjcSrg411WWh6khajdvuxcByh3K6Uy7VCB86Z6qw0DZiJsoQlUgz8H+qQXi2PNQu6pml8qEEBOXqu6U7WAiEclcQrNTlEX3S2pUQBRZCmhgIXiHXIZ5UHuDCA3Crg9zQASIFLWiHHf4yyw+HJPiGXK8ts2nRb8wkRhP4NVP7JImwPXU9/cYxlD7Q1PJB78XV/0Mz8UcZyhSDLjnQ7Gv/0iu8o340XpEpB9zyV4m62/YQq32+sm5gnYvfCnZ4nUF8InwcrFNzD6Cx7UAmVccbOnZb3Aix9lTeM+CPdwVQnR9uYjySneJE/uVGBfJLAvzoGngf6JksHoe2wLFZ5qdCjSFnGezd3KKcPE5INDni3TVRsbIW+Stj068+0LTnaQgp1n5fx0LWK/yD/H7lfB49Gu0h1Q4GfXPKWiSleZnmhiQli/qgzdYldHxIE87I7KJy1+aWKhbePam2/XCS/zV4g/QVWsxlAW3da960OblhO6RGLyf6r0QbCFwNlKI0dumWbGcfZy0aZmR7SHZCVvxTLuxPuj6PlWQLzl/f7z3l5W42ErwROaqbOYcKq0kr9acq0c/WifWlZvkBORJYrFgpC41oyzYFYkTpSu8LaqycVaKW/o1cJ8wooT1S36/kYTUk9WI0wFeZC+6+DSRrxnJSS8YR2PpiCxQZAWSigeawViQBDQmMvUYdidnyLSyOzPMmmZYVMV2RQv6/4brv2P6boKZSIjfmqINylC3jj26uCHqNa/vTXGIizEMUm49yNI+9uVNp3fLbE9sP3ByqhLf3igSjQysA2wtHyrbm5rb+6HelTYEI+vUowFyfjZadOh+Wz27oV2uKBbXNW9SwHD5LVKIacUbn5P16mTIIaY/JkO8tF0bCbCeH6+widc4OpwuoQsv7LgGXIOLeRXtCXoNn0EXpYtwreDWJ6mWA4VO90yjtNbiStcmtw/40kjgyn7EkuSUiWhSqPh5Gcaie2LqFFN4NTw8+GKESblsveZF7+o2QBajjnF/BO0H1pPoAidpfiY5lWqHN6jnlD5RawxoSMax4IlZjzoQ+pSwosWURbh7ubM9n8tMBXrJD3h+PsSupwn68gpm+/fXWhdLcscrlXrktdY/cujg7QfVSbbPTUJyO0oj9F0RkbLd9OPJzMx+G1cvtqtHy74PRh/CeVGgoYgK0PYAyYmiwyXzYEYKTv68kRjIFWB+WDNZjrc0+I/Lzmbk/ESHBO/k/6nvC1WuhxUiI/yhTPGUxvsSkZMa9M6CdjV6ycSQEmChrgmV4W2pX8+9Spo/n2hdt/wQ/7AXlpWdSn8AGNPXERXr0Grkhjei4r9GeD9NeQISSPaJDy0gsC1ub4IQN+P/4VdLCOR4uEM9N979dbaQwPLnCwnLcp9eKrelIMy00d0ONR9fAoIRto8A9WzpCwFhAkx+Lq477bwxSff89aPHNCtqhW9iZA+pULtVDXGU1FwhLBP74YaO971IJDfWlA85plH78U0nLOf9cdeT9ImigMK/VgXZ7AEsDZvgm3LML+Yevmlv1Sy6UUu8SswDOcZF9hGMNsuOhCDbuKHyZHSKgaBX0siZDZaIbOPYjpGbaycAJtoDcacnfKFw9bBsJIZFamlL8w+uYG7kJISzLl44KnKCMlBERIfNWJyMpDYdr4Ar7RqsfzdRODk9+yHZrq3sjuE84W0q7URrYWwjKhubTRvpc2B3uQpJoKl1D6zrEJRzQ/uL7QgnfNbnlrXrrMkCV25a4vF6/0g3rtja6TZjC1ul4tE4Cb6mV43RtsjPo+pQG/KJsYltCJAMTTA42q5BsCSR2zDQtET1XbKVprOaKqE/F6NDfN+EJ9FcjhubXV+vkPu0+e9F4ujCQFzejMCgKA8C3cMcOJyT7CFHh3YBcWLZsW5Ru4VqaTTe3uuPjCzzqnGCIiHkVr/+t3jaqidL1UoRGqDefiMOgWXi8m6zRozkC4buZuTRu4zpo8xW6Xy2aOhJmZv44mvU7xpNfaU01xZ2p+Ke1fkXJj4h5OsQ8VVF2HpmYt+X4OHYZ95qxs0zWGuvqUWHTAZAaKvmyICc4f49fBjZ8gRcAhohstWHuwQe0Rw8/+GB9Xe2Y0WnzCaxz6e0jZnbnGAGkJm0Oeycugx0FDPn22Jx++PV7bzJdreopfBthrkirY9enB6seIdP9NKzUk9jMnE87Idt0BoYJb1zlt63U3Vzs5mh+tsecVfSXOsZARM0BaOiXzo6uB3Yvki0aiZIDHRemyWA8ikdcISQhAQY+rX5LQXOSgFgoWjQzUnNPwwvb1r0HhpmFtBNGNc0VcGBEtU3SWx+X6AmnpKSIlc8XlwhjYD8bkDzWDPHzSVakUFk25seQjlSVsGFlIpwUKAhxcgaTbBeqOBYZkWu+iASLAKjPdWrBc2AgEVK+QiGslYc1TmWjSk06iCVOreGAUJtXghlezgn2cLaBHgFV4N3JUsyd9vpg+neH4iEyXT3pVQm+7L/1CiUeAMPYG+yawVWTD0mBQeOEgAiYLx+Wsy9PDw8hVpedn8lE8lcPChTl4zQiFiziJGJxi/nDWXNx8sDvDfeKD+b4DFcmqJv14cVBfjMJWI19ZtzuGD967OvhLl8o0fyGnF+pD5iYeco2adES8tzMASRQB/EUu++/4U92Q8nnD49ncKwgLuv8n05wQ7zDvHcY0Oz99fLREcK5IkLHq4HEQ7H1onV7wypit1wFI6SCnyl4xzr0zafjKqbLoYExCPovPhRC1naFiDPUF7612Qcy+a+arUjPaB+eS6PxexUKp+guykB0/VbvQyN3NWgnkx9DpeVVTu52/3XnYbBof0Vh7/iVfkoi/ga4Zgv+xgmPhN5F+sHzc4jIhtKBBAWICbXb1gIqjRRA8Gjv1YFEteJqnYyrhSnxfYkMhOR/+ztPL0xEH4Dfr00pAARTHYRT3NfMVR61RUIL1o0emfogqoyxWV++65+AWCQxH2CHVrxBJnm93MMXM2doF6QZKD3uASTHFeXsP5+02Ipe5QEUVFlqxI0u06x3o/w0fh6gklC/rD4px7RPR9tBsnANcFp9UFnKaLx+8GT+aSc23AOjvfhihezcwDHvfBk2BRIV0RvvGB5XhFppLvimEV6cTXyl3Fe/SIY6StdOw3LncBD3dLR0XiD/cVUvk0HGhi5HUtdZXYIZKLL6qA3BDGt2cTlCKTRFzRii8dm6TNQVH56WBxkUM1ebvtl/faJ9e+R0pp5zcSOuW/KG33xQ8egxrGaQjXf3zIWLOoantqwmw1td9ihYkLFLCe0kf5RlGXR9SNVBlmlPLoM+9voeWNhx9CJ+1Oiqq8Tu8ccPfWZRrNmsG1AXYmfgKCQEE/1BbROJGQXAsUOGqWERNnQnmYFeLGnPUjrBqguL0qcmlhigTp0f5rcRgVteoiKkmWg/tQI0rKYoTKIwlYh78hP4SuR8xkot3aTY8j/s+1AIQ5Zqav+/v6Hq2TyidD+qR5fZGXwH9DfEFjABGf64O6e37ZzPupA7DYpT+LJ1SRtDAyWpLwJ9+royU5BcKxvRxChR0yrJW6AS6szxcJdgnvh6fV0LjyUGzIUa7enZQzTEFHz92VR0rBph/zZxbtBco/UKOJQfZGnDSUf39zi+mYWxw9CxnHr76HxsuBJNtOqk3PjufW+ixbcbyS8R4vh8jiClCvNulWOuTnKS8MSCg4Jd/CRo8y9/7YXjy4Ui5LqNneN4MIRdza2SAYonFukubwUCxr6tuk+I6FhfLSnaVGvBj0qW/E4fe3YpDjx1xVFcSKYBFFKHYHo1qCLrTiAG7/BEpesFYE2MH6yeRhbfrfDNTFiLtNLRBkkehX43NWeQydgkZsgzJdycp2iscYARdXOODk+mx+RTY2Vg51mIKN7wX4KmZ82ftymZJtE1yaL06lxenZAGLTnoCzPtEcgotMW7jSrqFB8v0DyKMHcrMkzI3r7xFE39xegQul1moF2Zx6ghVgBKt+es7DBSYyQLK2Kds1bBuVnjtgJ1CfbUsfSsdqt5jAq9XOyPqbcMdw13/JxM+UCRgl8R/ZRFlTxoyUL1JB6KElaBhk/j/AwU9W5BEBMToR9j/xrSSXYhAINbXbGrXXTwo6XPieKQfAkEdMOKz7gpF/TJkaFIhXhlOWNX1JAC0uLmLx0XtHGuHyMfkshypQrQNKx47NGrEIvhuDgaT0wbK4QRWu1JbPUU1kI7iK3vuiezvydPH64yG5gQl9TVpD4wiFnSUXU+tK2euhajpBhKyusQPXkqqhuMHPQ2QM5Tgkki4kNgxJZ6KSb8wPTq31P/7WCUVQnTOnbHdoQU/1VOui0gESrRc3DbDTR9HrVFWCw9TV1U8NIK85TJeAUXUSUNXMkikcinjHPHix6LJxgYnt+h0ASPYwq2eE+GmYEHOjXXMe1SLxBdPfkHk13Ptpw27xlENUoCZmxpm/06qAk1qvL8iWGB+ZPiIMamQC3FGLm8wtDe/pYMNpfDbvElOzealIq2XERocEQqXNOImB7xAgvLBhVlV5XE1u6OoQ3fGfYR3U852cKHCrAWZlqteuesp22zXpqWTcwhsP9yLkytLSWwTmKN/eMirjHtjqo10OHNixJxspK6SxsVVZY742tcBwEkoawQc2VT+RX84ZrV7YlYnS88t4VDEc5+weqlrxvnR7ObXrn6TE1AglBNs/l5Gk8TC7apq6gzPsZOsQERUsce2KiloZje38L75InLVtMKiXQ2iqRshsqgcF7wWIM1zPYJ/WSdCKN+WZfM39IlF79ZStxZwLjiJUAKrgmaPqRIztu7/ZoE9LJROMYD7+kkMFweaYwtLvhGXdOitjINulRgUh3wyhnZVCKKyVoQonTpxUQtly/fDFVywEgXGl4MpHW+CZYvW87NjhErq4+tCyqT9UYJlwU1FjW9wU+hbtYtnn33+JXx6yK23nfSBdwwu4rF/BHvFFws1WcQfewrqBmqXjtlgiIHKudDBY59W5G8VEDVwDZVpapJdSeNIDw5y4Eaz89qxpHkqmj6OsL5uEGI0lAW/KcrtfTvQBsrREUnQBbcjBJwNqjFWM2VIVhNbGSjEEg5PRy8oTxi4gem2mBbBpqYPcfEpg3anK5ujP2sUgfk5mf9roXlO7zhfAKDI5MU1uORMR3L49CxVgEkHlMARxiZ02KuDRLwKkb9/OgG6dtx+EDleanOAlq+Vc3aaRYtSSClupvqvGPim7ui1jifKPlKRyWusBWVdLH6Q3v1DYd1TOXMrHhD0EzAV2cmQqAKhpUuPADn5hAQlE9B9ehXo88WCVU43GPPvyb9YiT44cB1uYhwE8/zE+aZJUPMSU7kTv98LWS7fFypOJM9//N4Z8DR6w5q6jCq+F7H9xTMGOnbd/yLOHuUjfzQ5RdolqaAdA3iXsOrnIxjBaNxjrTN9mYmzXkjZEPQ88l6bF0LCeVZEAEXyOM8lZeMcrc1FmTS0Ll7znuUt91qFmTyNQojyp9YiWDiJY3UI7GpwkKMIb+XjHRXBTQAp3oH45H4IAdfzZ40/sb0lfk6JJLLYuhjt/xDawT9TuPfqfaM7tFw3BzZW0Y46qHgnRtihszGDNEuRcPpOQQHlN2GvNvV13jOoQ0TjMR8xg3zwSgtCaRoufZotcSmfPSF7r4PUHyRMwMKGx9JMugvwY5t9fDvQG2daFCDBN2Xv8qJQbKu0ajKBPTLWBWEMJkVIzbyQ5qRncZ/BuB2SVMg3iABZoebpeu7qJzgb8uMNOVVS9NDPl0iuIh7ATxaFC9o2DiR6vqP07jGvvpMRD+fLdZ+RbVb5AvQrEV2RTkctp46bLeoByM4cxBiuIM6ytNcZSmLm/UZcj51iLgrYVnJ81aX6Hhgqvxf4iABGeedDTfFeB3LR1DTYgd5+bFKQxQ4u5Xb+5XPVC36Hlr6dbOGzQ2/6FBZ3/Jpe4KYtAeAZINiUzL5uOvdAEb6gxkwYp4WUqzkMTIm311e/ao5wTz0PVIRkmejlFDw43nJf9xWDFay81etcdH1V7H7JQeKCZcXuaWZXpQMVqcT7TnrOEnk6QYw3VOv6mgDEroocimeTykuux9u2gT9AqjntMrxMCwS/VboBj0aWyYGt5HI0m5VPXcywCZtMBqJQi2WjL2skB1H8ASYjd0U3pSIzm5oQMsS9CK9M98G61sRZftyVzbpac8gltLOm2ilcOqvJdVI0uNFP8RWqPXdhDbFULOO8CxCRQKK1dGYYrygf3E9NcAhGA6uxxvJ2ZR+jgf5GnX2nce0XHbO/SyjYvrUREzRgSpJo0dnhp9EynjQOPVN2LSoz9pXp6mGrUdqNyeNENdy/I1WPTKPfOJJYikNJRJmCgdchFd5B4nKA/WYGA2SFBIV9C7AGSW4fd266yKKJsRk5PF34CFiGbgGH69wHuPLkQJ2+VVcamIeCWv2aBYUKCa0SkcxcBr635F0lQXMBaEMbFLbqDyJ89jNsgMhNMKCs03cwdXZk/x91+cPJEF0pgLtk/QtwFqbbIL5lp6tnvOrt+pkKvtJuFaU0OCDR8dMLuPKlbXfMxarwkqs+HUQdFuud0ochsFkc6f83A6rSgDzN/FNxRKp6VLfRnoJ6Sgo6XEmEzwOOYmkng+UXkEs2WF6xIaLt510pGVyMy37pP1XuoARgebEHFbjKwoC4N2XzUV+kIfEy/S7BnXBVnN8ASQSBq+SUryyjI1ZOe9Ceq31qocLH1KEVZd7tX0UkKuBJifL5qDhKH3CHWCnaTpvVKSTlh/MhG538pQopiumt70hdiEWOB53PNQyftmbyArMb1j6jcTKRjwpw13NnExbJpqGujt+MttldENyQNwoSE0pqLT5xvtLZBw8aa1CqK/v4y8afrrWmNPiIwnTeEFHsYxBjQLISGkpKJJe5ieG8oNJ5Pm8F4A/6/QwawY8+qtYddQMbHMzzWoSDFEiqvZbJ8ZoM1sutTueL/zyQnt2V4pdz1KxYq82hUWHvU8MbEBP4I82QB1Xvmtyr17toCvtjhBAZ4dqEtp+684iwWC9DccUxs+7MuAyqCUdSUf4P6BzZAXlEi8EdmkRWe7qz7EHZw9dqmaXdwn8Mv7xN9tbsa+LVSqa00BRnv3nlkrSfU7kKIMSsbSRTa6zxbPCiE1kMe7qBQ1Kf8aN2wz9J32XaZhpiLT9IdIwBm+VBc0DUoRLScGmlNRi9wr+Ufar0zdqyu6WZ9i/h6rF1i7L33cTO1bbGXKZKJrveIoFmCDtFD3vDWnBBzaqJJem85Zr7zM9yXL+8ynLYWcqGt040oNwQQNtWQlB+eNzj6I2c5fowV7eWCexEQM1khKxZ17+3DV8hMft4bLkwv+/T7yEvalt9IOg1pG2hwt+X+2CP5mnvvKwgRzp3Y7lLRFYKaYOyfE0XIn1SHcfpzSjJ4DgSp+UAQSndmZnu1GCGsZP0+wNwsQ0eqdpqR4i5IqxD9AyQArehOD6Szr0Z+wIjlZJQWCAYRzPq4kWajsTQuai5fiGI9avzT8ZlJ7OqUcyjIee7+MKj/xQW3DgO+TnxqnFjFWwdBZQbVgKC4Q2eKEGi7NRKF5NzCYFMJc7sxLS/OxBSWojuMVQbXZt1YUToA5Gxw1UhLqg9AuVk5jtgMPhfw1KU3t345Ma2ns5pWbdmRWDF1ppeIGYC/ua+Z9/qsQHUvELFKQsmzq5GtadDMwWrINolFM7OuYdUIA5IB+VR6e+w=="};
-// Nur in der Vorschau: Fragen im Klartext, kein Versand.
-const DEMO_BANK = /*DEMO_BANK*/null;
+const BANKS = {"de":{"disc":[{"id":"d1","words":["durchsetzungsstark","begeisterungsfähig","geduldig","genau"]},{"id":"d2","words":["entschlossen","gesellig","hilfsbereit","analytisch"]},{"id":"d3","words":["direkt","überzeugend","loyal","gewissenhaft"]},{"id":"d4","words":["wettbewerbsorientiert","optimistisch","ausgeglichen","sorgfältig"]},{"id":"d5","words":["mutig","gesprächig","zuverlässig","systematisch"]},{"id":"d6","words":["fordernd","spontan","ruhig","perfektionistisch"]},{"id":"d7","words":["zielstrebig","inspirierend","verständnisvoll","logisch"]},{"id":"d8","words":["ungeduldig","charmant","beständig","diszipliniert"]},{"id":"d9","words":["risikofreudig","lebhaft","rücksichtsvoll","vorsichtig"]},{"id":"d10","words":["bestimmend","kontaktfreudig","gelassen","detailverliebt"]},{"id":"d11","words":["energisch","verspielt","teamorientiert","strukturiert"]},{"id":"d12","words":["eigenständig","ausdrucksstark","entgegenkommend","kritisch"]},{"id":"d13","words":["hartnäckig","humorvoll","harmoniebedürftig","prüfend"]},{"id":"d14","words":["schnell entschieden","mitreißend","gutmütig","sachlich"]},{"id":"d15","words":["dominant","offen","treu","ordentlich"]},{"id":"d16","words":["kämpferisch","beliebt","besonnen","korrekt"]},{"id":"d17","words":["herausfordernd","enthusiastisch","umgänglich","planvoll"]},{"id":"d18","words":["ergebnisorientiert","unterhaltsam","freundlich","gründlich"]},{"id":"d19","words":["selbstbewusst","vertrauensvoll","unterstützend","präzise"]},{"id":"d20","words":["führend","emotional","zurückhaltend","regelbewusst"]},{"id":"d21","words":["unerschrocken","motivierend","verlässlich","qualitätsbewusst"]},{"id":"d22","words":["konfrontationsbereit","extrovertiert","friedlich","reserviert"]},{"id":"d23","words":["tatkräftig","fröhlich","bescheiden","faktenorientiert"]},{"id":"d24","words":["resolut","redegewandt","sanftmütig","methodisch"]}],"cog":[{"id":"r1","cat":"Reihen","q":"Wie geht die Reihe weiter?  81 · 27 · 9 · 3 · ?","options":["0","1","2","−3"]},{"id":"r2","cat":"Reihen","q":"Wie geht die Reihe weiter?  2 · 5 · 11 · 23 · 47 · ?","options":["94","71","95","96"]},{"id":"r3","cat":"Reihen","q":"Wie geht die Reihe weiter?  2 · 3 · 5 · 9 · 17 · ?","options":["25","33","34","31"]},{"id":"r4","cat":"Reihen","q":"Wie geht die Reihe weiter?  7 · 10 · 8 · 11 · 9 · 12 · ?","options":["10","13","15","8"]},{"id":"r5","cat":"Reihen","q":"Wie geht die Reihe weiter?  4 · 6 · 9 · 13,5 · ?","options":["18","20,25","19,5","27"]},{"id":"r6","cat":"Reihen","q":"Wie geht die Reihe weiter?  A · C · F · J · O · ?","options":["T","S","U","V"]},{"id":"v1","cat":"Sprache","q":"Buch verhält sich zu Seite wie Film zu …","options":["Kino","Szene","Regisseur","Kamera"]},{"id":"v2","cat":"Sprache","q":"Kapitän verhält sich zu Schiff wie Dirigent zu …","options":["Taktstock","Konzert","Orchester","Bühne"]},{"id":"v3","cat":"Sprache","q":"Raupe verhält sich zu Schmetterling wie Kaulquappe zu …","options":["Fisch","Teich","Frosch","Ei"]},{"id":"v4","cat":"Sprache","q":"Welches Wort passt nicht in die Reihe?","options":["Schraube","Niete","Dübel","Hammer","Nagel"]},{"id":"v5","cat":"Sprache","q":"Welches Wort bedeutet am ehesten das Gegenteil von „sporadisch“?","options":["selten","regelmäßig","spontan","zufällig"]},{"id":"l1","cat":"Logik","q":"Alle Cutter sind kreativ. Einige Kreative stehen früh auf. Folgt daraus zwingend, dass einige Cutter früh aufstehen?","options":["Ja","Nein","Nur wenn es mehr Cutter als Kreative gibt"]},{"id":"l2","cat":"Logik","q":"Anna ist älter als Ben. Ben ist älter als Clara. Clara ist älter als David. Wer ist am zweitjüngsten?","options":["Anna","Ben","Clara","David"]},{"id":"l3","cat":"Logik","q":"Wenn es regnet, ist die Straße nass. Die Straße ist nicht nass. Was folgt daraus?","options":["Es regnet.","Es regnet nicht.","Man kann nichts sagen.","Die Straße wurde abgetrocknet."]},{"id":"l4","cat":"Logik","q":"Ein Dreh findet drei Tage nach dem Tag statt, der vor Donnerstag liegt. An welchem Tag ist der Dreh?","options":["Freitag","Samstag","Sonntag","Montag"]},{"id":"m1","cat":"Rechnen","q":"Ein Video ist 90 Sekunden lang. Du kürzt es um 20 %. Wie lang ist es danach?","options":["70 s","72 s","75 s","68 s"]},{"id":"m2","cat":"Rechnen","q":"Für 3 Reels brauchst du 4,5 Stunden. Wie lange brauchst du im gleichen Tempo für 5 Reels?","options":["6 h","7 h","7,5 h","8 h"]},{"id":"m3","cat":"Rechnen","q":"Ein Post hat 2.400 Aufrufe und 96 Likes. Wie hoch ist die Like-Rate?","options":["2,5 %","4 %","9,6 %","0,4 %"]},{"id":"m4","cat":"Rechnen","q":"Du arbeitest 10 Stunden pro Woche. 40 % gehen in den Schnitt, der Rest zu gleichen Teilen in Posten und Planung. Wie viele Minuten sind das für Planung?","options":["120 min","150 min","180 min","240 min"]},{"id":"m5","cat":"Rechnen","q":"Ein Clip läuft 12 Sekunden mit 25 Bildern pro Sekunde. Wie viele Einzelbilder hat er?","options":["250","300","275","360"]}],"contentMc":[{"id":"c1","cat":"Content","q":"In welchem Format exportierst du ein Instagram-Reel oder TikTok?","options":["16:9 · 1920 × 1080","9:16 · 1080 × 1920","1:1 · 1080 × 1080","4:5 · 1080 × 1350"]},{"id":"c2","cat":"Content","q":"Wo verliert ein Kurzvideo typischerweise die meisten Zuschauer?","options":["In den ersten 1–3 Sekunden","In der Mitte","Kurz vor dem Ende","Das ist gleich verteilt"]},{"id":"c3","cat":"Content","q":"Ein Video aus der Fertigungshalle: laute Maschinen, die meisten schauen ohne Ton. Was ist am wichtigsten?","options":["Lautere Musik","Untertitel und Text-Einblendungen","Längere Einstellungen","Ein Voice-over"]},{"id":"c4","cat":"Content","q":"Zielgruppe sind Produktionsleiter. Welcher Einstieg (Hook) funktioniert für ein GIRI-Reel am besten?","options":["„Hallo zusammen, heute stellen wir euch unsere Software vor.“","„Neuer Mitarbeiter, erster Tag – und die Baugruppe sitzt fehlerfrei. So geht’s.“","„GIRI – die Softwarelösung für digitale Arbeitsanweisungen.“","„Liken und folgen nicht vergessen!“"]},{"id":"c5","cat":"Content","q":"Welche Bildunterschrift ist fehlerfrei?","options":["Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau was als Nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als Nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als Nächstes zu tuen ist."]},{"id":"c6","cat":"Content","q":"Which English caption is correct?","options":["Your new hires are productive from day one – regardless of they’re experience.","Your new hires are productive from day one – regardless of their experience.","You’re new hires are productive from day one – regardless of their experience.","Your new hire’s are productive from day one – regardless of their experience."]},{"id":"c7","cat":"Content","q":"Nach einem Dreh importierst du 300 Clips von zwei Kameras. Was machst du zuerst?","options":["Direkt mit dem Schnitt anfangen, solange alles frisch ist","Ordner nach Datum / Dreh / Kamera anlegen und die Clips sauber benennen","Alles in einen Ordner, die Suche findet es später schon","Schlechte Clips sofort löschen, um Speicher zu sparen"]}],"contentOpen":[{"id":"o1","q":"Wir haben einen 2-Stunden-Dreh bei einem Kunden in der Fertigung. Was machst du alles aus dem Material? Liste die Formate auf (z. B. welche Videos, für welchen Kanal, in welcher Länge, welche Stills).","hint":"Stichpunkte. Je konkreter, desto besser."},{"id":"o2","q":"Du hast 12 Minuten Rohmaterial von einem Kundenbesuch: Interview mit dem Werksleiter, B-Roll aus der Halle, Aufnahmen von GIRI am Tablet. Beschreib in Stichpunkten dein 30-Sekunden-Reel: Szenen in welcher Reihenfolge, Text-Einblendungen, Musik.","hint":"Stichpunkte, kein Fließtext."},{"id":"o3","q":"Donnerstag, 16 Uhr, du hast noch 2 Stunden. Offen sind: (a) Reel zur Messe-Ankündigung, muss Freitag 10 Uhr online sein, (b) Story vom heutigen Kundenbesuch, (c) Thumbnails für ein YouTube-Video nächste Woche, (d) Ordnerstruktur im Video-Archiv aufräumen. In welcher Reihenfolge gehst du vor und warum?","hint":"Reihenfolge + 1 Satz Begründung."}],"tools":["CapCut","Premiere Pro","DaVinci Resolve","Final Cut","After Effects","Canva","Photoshop"]},"en":{"disc":[{"id":"d1","words":["assertive","enthusiastic","patient","accurate"]},{"id":"d2","words":["decisive","sociable","helpful","analytical"]},{"id":"d3","words":["direct","persuasive","loyal","conscientious"]},{"id":"d4","words":["competitive","optimistic","even-tempered","careful"]},{"id":"d5","words":["bold","talkative","reliable","systematic"]},{"id":"d6","words":["demanding","spontaneous","calm","perfectionist"]},{"id":"d7","words":["goal-driven","inspiring","understanding","logical"]},{"id":"d8","words":["impatient","charming","steady","disciplined"]},{"id":"d9","words":["risk-taking","lively","considerate","cautious"]},{"id":"d10","words":["commanding","outgoing","relaxed","detail-oriented"]},{"id":"d11","words":["energetic","playful","team-oriented","structured"]},{"id":"d12","words":["independent","expressive","accommodating","critical"]},{"id":"d13","words":["persistent","humorous","harmony-seeking","questioning"]},{"id":"d14","words":["quick to decide","captivating","good-natured","matter-of-fact"]},{"id":"d15","words":["dominant","open","faithful","orderly"]},{"id":"d16","words":["combative","popular","level-headed","correct"]},{"id":"d17","words":["challenging","exuberant","easygoing","deliberate"]},{"id":"d18","words":["results-oriented","entertaining","friendly","thorough"]},{"id":"d19","words":["self-confident","trusting","supportive","exact"]},{"id":"d20","words":["leading","emotional","low-key","rule-abiding"]},{"id":"d21","words":["fearless","motivating","dependable","quality-minded"]},{"id":"d22","words":["confrontational","extroverted","peaceful","reserved"]},{"id":"d23","words":["vigorous","cheerful","modest","fact-based"]},{"id":"d24","words":["resolute","eloquent","gentle","methodical"]}],"cog":[{"id":"r1","cat":"Reihen","q":"What comes next?  81 · 27 · 9 · 3 · ?","options":["0","1","2","−3"]},{"id":"r2","cat":"Reihen","q":"What comes next?  2 · 5 · 11 · 23 · 47 · ?","options":["94","71","95","96"]},{"id":"r3","cat":"Reihen","q":"What comes next?  2 · 3 · 5 · 9 · 17 · ?","options":["25","33","34","31"]},{"id":"r4","cat":"Reihen","q":"What comes next?  7 · 10 · 8 · 11 · 9 · 12 · ?","options":["10","13","15","8"]},{"id":"r5","cat":"Reihen","q":"What comes next?  4 · 6 · 9 · 13.5 · ?","options":["18","20.25","19.5","27"]},{"id":"r6","cat":"Reihen","q":"What comes next?  A · C · F · J · O · ?","options":["T","S","U","V"]},{"id":"v1","cat":"Sprache","q":"Book is to page as film is to …","options":["cinema","scene","director","camera"]},{"id":"v2","cat":"Sprache","q":"Captain is to ship as conductor is to …","options":["baton","concert","orchestra","stage"]},{"id":"v3","cat":"Sprache","q":"Caterpillar is to butterfly as tadpole is to …","options":["fish","pond","frog","egg"]},{"id":"v4","cat":"Sprache","q":"Which word does not belong?","options":["screw","rivet","wall plug","hammer","nail"]},{"id":"v5","cat":"Sprache","q":"Which word is closest to the opposite of “sporadic”?","options":["rare","regular","spontaneous","random"]},{"id":"l1","cat":"Logik","q":"All video editors are creative. Some creative people get up early. Does it necessarily follow that some video editors get up early?","options":["Yes","No","Only if there are more editors than creative people"]},{"id":"l2","cat":"Logik","q":"Anna is older than Ben. Ben is older than Clara. Clara is older than David. Who is the second youngest?","options":["Anna","Ben","Clara","David"]},{"id":"l3","cat":"Logik","q":"If it rains, the street is wet. The street is not wet. What follows?","options":["It is raining.","It is not raining.","Nothing can be concluded.","The street was dried."]},{"id":"l4","cat":"Logik","q":"A shoot takes place three days after the day before Thursday. On which day is the shoot?","options":["Friday","Saturday","Sunday","Monday"]},{"id":"m1","cat":"Rechnen","q":"A video is 90 seconds long. You shorten it by 20 %. How long is it afterwards?","options":["70 s","72 s","75 s","68 s"]},{"id":"m2","cat":"Rechnen","q":"3 reels take you 4.5 hours. At the same pace, how long do 5 reels take?","options":["6 h","7 h","7.5 h","8 h"]},{"id":"m3","cat":"Rechnen","q":"A post has 2,400 views and 96 likes. What is the like rate?","options":["2.5 %","4 %","9.6 %","0.4 %"]},{"id":"m4","cat":"Rechnen","q":"You work 10 hours a week. 40 % goes into editing, the rest is split equally between posting and planning. How many minutes is that for planning?","options":["120 min","150 min","180 min","240 min"]},{"id":"m5","cat":"Rechnen","q":"A clip runs for 12 seconds at 25 frames per second. How many frames does it have?","options":["250","300","275","360"]}],"contentMc":[{"id":"c1","cat":"Content","q":"Which format do you export an Instagram Reel or TikTok in?","options":["16:9 · 1920 × 1080","9:16 · 1080 × 1920","1:1 · 1080 × 1080","4:5 · 1080 × 1350"]},{"id":"c2","cat":"Content","q":"Where does a short video typically lose the most viewers?","options":["In the first 1–3 seconds","In the middle","Just before the end","It’s spread evenly"]},{"id":"c3","cat":"Content","q":"A video from the factory floor: loud machines, most people watch without sound. What matters most?","options":["Louder music","Subtitles and text overlays","Longer shots","A voice-over"]},{"id":"c4","cat":"Content","q":"The target audience is production managers. Which opening line (hook) works best for a GIRI reel?","options":["“Hi everyone, today we’re presenting our software.”","“New employee, first day – and the assembly is flawless. Here’s how.”","“GIRI – the software solution for digital work instructions.”","“Don’t forget to like and follow!”"]},{"id":"c5","cat":"Content","q":"The job includes German posts. Which German caption is correct?","options":["Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau was als Nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als Nächstes zu tun ist.","Schluss mit Zettelwirtschaft: Mit GIRI sieht jeder Mitarbeiter genau, was als Nächstes zu tuen ist."]},{"id":"c6","cat":"Content","q":"Which English caption is correct?","options":["Your new hires are productive from day one – regardless of they’re experience.","Your new hires are productive from day one – regardless of their experience.","You’re new hires are productive from day one – regardless of their experience.","Your new hire’s are productive from day one – regardless of their experience."]},{"id":"c7","cat":"Content","q":"After a shoot you import 300 clips from two cameras. What do you do first?","options":["Start editing right away while everything is fresh","Create folders by date / shoot / camera and name the clips properly","Put everything in one folder – search will find it later","Delete bad clips immediately to save space"]}],"contentOpen":[{"id":"o1","q":"We have a 2-hour shoot at a customer’s manufacturing site. What would you produce from the footage? List the formats (e.g. which videos, for which channel, what length, which stills).","hint":"Bullet points. The more specific, the better."},{"id":"o2","q":"You have 12 minutes of raw footage from a customer visit: interview with the plant manager, B-roll from the shop floor, shots of GIRI on a tablet. Describe your 30-second reel in bullet points: scenes in which order, text overlays, music.","hint":"Bullet points, no prose."},{"id":"o3","q":"Thursday, 4 pm, you have 2 hours left. Open tasks: (a) reel announcing a trade fair, must be online Friday 10 am, (b) story from today’s customer visit, (c) thumbnails for a YouTube video next week, (d) tidy up the folder structure in the video archive. In which order do you work and why?","hint":"Order + one sentence on why."}],"tools":["CapCut","Premiere Pro","DaVinci Resolve","Final Cut","After Effects","Canva","Photoshop"]}};        // { de: {...}, en: {...} } – Fragen ohne Lösungen
+const DEMO = /*DEMO*/false;         // Vorschau: nichts wird verschickt
+
+// ---------- Texte ----------
+const TEXT = {
+  de: {
+    brand: "Bewerbertest",
+    watch: "👁 Das Verlassen des Testfensters wird registriert.",
+    leaves: (n) => `Testfenster ${n}× verlassen`,
+    leftToast: (n) => `Testfenster verlassen – registriert (${n}×)`,
+    pasteToast: "Einfügen ist im Test deaktiviert.",
+    hello: "Willkommen!",
+    intro: "Schön, dass du da bist. Dieser Test dauert etwa <b>30 Minuten</b> und hat drei Teile:",
+    p1: "<b>Arbeitsstil</b> · ca. 6 Min.", p1d: "Wie du dich selbst siehst. Es gibt kein richtig oder falsch.",
+    p2: "<b>Denkaufgaben</b> · 15 Min.", p2d: "Zahlen, Sprache, Logik. Die Zeit läuft sichtbar mit.",
+    p3: "<b>Content &amp; Video</b> · 10 Min.", p3d: "Fragen und kurze Aufgaben aus dem Job.",
+    rules: "Bitte leg dein Handy weg und bleib in diesem Fenster. <b>Jedes Verlassen des Testfensters wird registriert und mitgeschickt.</b> Hilfsmittel wie Suche oder ChatGPT sind nicht erlaubt. Einmal beantwortete Fragen kannst du nicht mehr ändern.",
+    name: "Dein Name", email: "E-Mail", optional: "(optional)",
+    consent: "Ich bin einverstanden, dass die AR-Experts GmbH meine Antworten zur Auswahl im Bewerbungsverfahren auswertet und speichert. Die Daten werden nach spätestens 6 Monaten gelöscht. Die Teilnahme ist freiwillig.",
+    start: "Test starten", needName: "Bitte gib deinen Namen ein.", needConsent: "Bitte bestätige die Einwilligung.",
+    pre: "Vorab", preMin: "Vorab · 1 Minute", toolsQ: "Wie gut kennst du diese Tools?",
+    levels: ["nie", "Grundl.", "sicher", "Profi"], toPart1: "Weiter zu Teil 1",
+    partOf: (n) => `Teil ${n} von 3`, part: (n) => `Teil ${n}`, of: "von",
+    discPill: "Teil 1 · Arbeitsstil", how: "So funktioniert's",
+    discIntro: `<p>Du siehst 24 Mal vier Eigenschaften. Pro Runde tippst du zwei Mal:</p>
+      <ul><li>zuerst auf das Wort, das <b>am meisten</b> zu dir passt,</li><li>dann auf das Wort, das <b>am wenigsten</b> zu dir passt.</li></ul>
+      <p>Oft passen mehrere oder keins so richtig. Das ist gewollt – nimm einfach das, was am ehesten stimmt.</p>
+      <p>Denk an dich bei der Arbeit. Nicht lange überlegen, der erste Impuls ist meistens der richtige. Es gibt kein richtig oder falsch.</p>`,
+    noLimit: "Ohne Zeitlimit, ca. 6 Minuten", letsGo: "Los geht's",
+    most: "Welches Wort passt <u>am meisten</u> zu dir?", least: "Und welches passt <u>am wenigsten</u> zu dir?",
+    step1: "Schritt 1 von 2 · denk an dich bei der Arbeit", step2: "Schritt 2 von 2", mostTag: "am meisten",
+    back: "Zurück", tap: "Tippen genügt",
+    cogPill: "Teil 2 · Denkaufgaben", cogH: "20 Aufgaben in 15 Minuten",
+    cogRules: ["Zahlenreihen, Sprache, Logik und etwas Rechnen.", "Kopfrechnen reicht. Kein Taschenrechner, kein Handy.", "Du kannst eine Aufgabe überspringen, aber nicht zurückgehen.", "Nicht jeder schafft alles. Wenn du hängst: lieber raten oder weiter.", "Wenn die Zeit abläuft, geht es automatisch mit Teil 3 weiter."],
+    clockHint: "Die Zeit startet mit dem Klick.", startClock: "Zeit starten",
+    skip: "Überspringen", next: "Weiter",
+    contentPill: "Teil 3 · Content &amp; Video",
+    contentH: (a, b) => `${a} kurze Fragen und ${b} kleine Aufgaben · 10 Minuten`,
+    contentRules: ["Erst Auswahlfragen, dann drei Aufgaben mit eigenem Text.", "Bei den Aufgaben zählen deine Ideen, nicht schöne Sätze. Stichpunkte sind völlig okay.", "Plan für die Textaufgaben mindestens 6 Minuten ein."],
+    task: (i, n) => `Teil 3 · Aufgabe ${i} von ${n}`, finish: "Test abschließen",
+    saving: "Wird gespeichert …", doneH: "Geschafft, danke!", doneP: "Deine Antworten sind angekommen.<br>Gib uns kurz Bescheid, dass du fertig bist.",
+    failH: "Speichern hat nicht geklappt", failP: "Bitte schließ das Fenster nicht und gib uns Bescheid.", retry: "Nochmal versuchen",
+  },
+  en: {
+    brand: "Applicant test",
+    watch: "👁 Leaving the test window is recorded.",
+    leaves: (n) => `Test window left ${n}×`,
+    leftToast: (n) => `Test window left – recorded (${n}×)`,
+    pasteToast: "Pasting is disabled during the test.",
+    hello: "Welcome!",
+    intro: "Great to have you here. This test takes about <b>30 minutes</b> and has three parts:",
+    p1: "<b>Work style</b> · approx. 6 min", p1d: "How you see yourself. There are no right or wrong answers.",
+    p2: "<b>Reasoning</b> · 15 min", p2d: "Numbers, language, logic. A visible timer runs.",
+    p3: "<b>Content &amp; video</b> · 10 min", p3d: "Questions and short tasks from the job.",
+    rules: "Please put your phone away and stay in this window. <b>Every time you leave the test window, it is recorded and reported.</b> Aids such as search engines or ChatGPT are not allowed. You can’t change an answer once you’ve moved on.",
+    name: "Your name", email: "Email", optional: "(optional)",
+    consent: "I agree that AR-Experts GmbH evaluates and stores my answers for the purpose of this application process. The data will be deleted after 6 months at the latest. Participation is voluntary.",
+    start: "Start test", needName: "Please enter your name.", needConsent: "Please confirm your consent.",
+    pre: "Warm-up", preMin: "Warm-up · 1 minute", toolsQ: "How well do you know these tools?",
+    levels: ["never", "basic", "good", "expert"], toPart1: "Continue to part 1",
+    partOf: (n) => `Part ${n} of 3`, part: (n) => `Part ${n}`, of: "of",
+    discPill: "Part 1 · Work style", how: "How it works",
+    discIntro: `<p>You’ll see four traits, 24 times. Each round you tap twice:</p>
+      <ul><li>first the word that describes you <b>most</b>,</li><li>then the word that describes you <b>least</b>.</li></ul>
+      <p>Often several fit, or none fits perfectly. That’s intended – just pick the closest one.</p>
+      <p>Think of yourself at work. Don’t overthink it, your first impulse is usually right. There are no right or wrong answers.</p>`,
+    noLimit: "No time limit, approx. 6 minutes", letsGo: "Let’s go",
+    most: "Which word describes you <u>most</u>?", least: "And which describes you <u>least</u>?",
+    step1: "Step 1 of 2 · think of yourself at work", step2: "Step 2 of 2", mostTag: "most",
+    back: "Back", tap: "Just tap",
+    cogPill: "Part 2 · Reasoning", cogH: "20 questions in 15 minutes",
+    cogRules: ["Number series, language, logic and a bit of maths.", "Mental arithmetic is enough. No calculator, no phone.", "You can skip a question, but you can’t go back.", "Not everyone finishes. If you’re stuck, guess or move on.", "When time runs out, part 3 starts automatically."],
+    clockHint: "The timer starts when you click.", startClock: "Start timer",
+    skip: "Skip", next: "Next",
+    contentPill: "Part 3 · Content &amp; video",
+    contentH: (a, b) => `${a} short questions and ${b} small tasks · 10 minutes`,
+    contentRules: ["Multiple-choice questions first, then three tasks where you write your own answer.", "Your ideas count, not polished sentences. Bullet points are perfectly fine.", "Plan at least 6 minutes for the writing tasks."],
+    task: (i, n) => `Part 3 · Task ${i} of ${n}`, finish: "Finish test",
+    saving: "Saving …", doneH: "Done – thank you!", doneP: "Your answers have been received.<br>Please let us know that you’re finished.",
+    failH: "Saving didn’t work", failP: "Please don’t close this window and let us know.", retry: "Try again",
+  },
+};
+let LANG = "de";
+const t = (k) => TEXT[LANG][k];
 
 // ---------- Zustand ----------
 const S = {
-  code: "", name: "", email: "", bank: null,
+  name: "", email: "", bank: null,
   data: { tools: {}, disc: {}, cog: {}, contentMc: {}, contentOpen: {}, meta: { blurCount: 0, blurMs: 0, pasteAttempts: 0, sectionMs: {}, timedOut: {} } },
   running: false, blurAt: null, t0: null, secT0: null,
 };
@@ -122,9 +213,25 @@ const $app = document.getElementById("app");
 const $bar = document.getElementById("bar");
 const $timer = document.getElementById("timer");
 const $section = document.getElementById("section");
+const $lang = document.getElementById("lang");
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const progress = (p) => { $bar.style.width = Math.round(p * 100) + "%"; };
+
+// ---------- Sprache ----------
+function setLang(l) {
+  LANG = l;
+  document.documentElement.lang = l;
+  document.getElementById("brand").textContent = t("brand");
+  document.getElementById("watchText").textContent = t("watch");
+  $lang.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === l));
+}
+$lang.querySelectorAll("button").forEach((b) => b.onclick = () => {
+  if (S.running || b.dataset.l === LANG) return;
+  const keep = { name: val("name"), email: val("email"), consent: document.getElementById("consent")?.checked };
+  setLang(b.dataset.l); welcome(keep);
+});
+const val = (id) => document.getElementById(id)?.value ?? "";
 
 // ---------- Anti-Schummel ----------
 const $watch = document.getElementById("watch");
@@ -132,9 +239,9 @@ const $leaves = document.getElementById("leaves");
 function updateLeave(showToast) {
   const n = S.data.meta.blurCount;
   $leaves.hidden = n === 0;
-  $leaves.textContent = `Testfenster ${n}× verlassen`;
+  $leaves.textContent = t("leaves")(n);
   $watch.classList.toggle("alert", n > 0);
-  if (showToast && n > 0) toast(`Testfenster verlassen – registriert (${n}×)`);
+  if (showToast && n > 0) toast(t("leftToast")(n));
 }
 document.addEventListener("visibilitychange", () => {
   if (!S.running) return;
@@ -143,16 +250,16 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("blur", () => { if (S.running && !document.hidden && !S.blurAt) { S.blurAt = Date.now(); S.data.meta.blurCount++; updateLeave(false); } });
 window.addEventListener("focus", () => { if (S.running && S.blurAt && !document.hidden) { S.data.meta.blurMs += Date.now() - S.blurAt; S.blurAt = null; updateLeave(true); } });
-document.addEventListener("paste", (e) => { if (S.running) { e.preventDefault(); S.data.meta.pasteAttempts++; toast("Einfügen ist im Test deaktiviert."); } });
+document.addEventListener("paste", (e) => { if (S.running) { e.preventDefault(); S.data.meta.pasteAttempts++; toast(t("pasteToast")); } });
 document.addEventListener("copy", (e) => { if (S.running) e.preventDefault(); });
 document.addEventListener("contextmenu", (e) => { if (S.running) e.preventDefault(); });
 window.addEventListener("beforeunload", (e) => { if (S.running) { e.preventDefault(); e.returnValue = ""; } });
 
 function toast(msg) {
-  const t = document.createElement("div");
-  t.textContent = msg;
-  Object.assign(t.style, { position: "fixed", left: "50%", bottom: "24px", transform: "translateX(-50%)", background: "#262626", color: "#fff", padding: "10px 16px", borderRadius: "10px", fontSize: "14px", zIndex: 50 });
-  document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+  const el = document.createElement("div");
+  el.textContent = msg;
+  Object.assign(el.style, { position: "fixed", left: "50%", bottom: "24px", transform: "translateX(-50%)", background: "#262626", color: "#fff", padding: "10px 16px", borderRadius: "10px", fontSize: "14px", zIndex: 50 });
+  document.body.appendChild(el); setTimeout(() => el.remove(), 2200);
 }
 
 // ---------- Timer ----------
@@ -173,94 +280,72 @@ function stopTimer() { clearInterval(tick); $timer.hidden = true; }
 function sectionStart(key) { S.secT0 = Date.now(); S.curSec = key; }
 function sectionEnd() { if (S.curSec) S.data.meta.sectionMs[S.curSec] = Date.now() - S.secT0; S.curSec = null; }
 
-// ---------- API ----------
-const b64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
-async function unlockBank(code) {
-  if (DEMO_BANK) return DEMO_BANK;
-  const pw = new TextEncoder().encode(code.trim().toLowerCase());
-  const base = await crypto.subtle.importKey("raw", pw, "PBKDF2", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: b64(ENC_BANK.salt), iterations: ENC_BANK.iter, hash: "SHA-256" },
-    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(ENC_BANK.iv) }, key, b64(ENC_BANK.data));
-  return JSON.parse(new TextDecoder().decode(plain));
-}
-
+// ---------- Versand ----------
 async function submit() {
-  if (DEMO_BANK) { await new Promise((r) => setTimeout(r, 400)); return { ok: true, demo: true }; }
+  if (DEMO) { await new Promise((r) => setTimeout(r, 400)); return { ok: true, demo: true }; }
   // Formular-Body ohne eigene Header: kein CORS-Preflight nötig
-  const body = new URLSearchParams({ action: "submit", code: S.code, name: S.name, email: S.email, payload: JSON.stringify(S.data) });
+  const body = new URLSearchParams({ action: "submit", code: CONFIG.KEY, name: S.name, email: S.email, payload: JSON.stringify(S.data) });
   const r = await fetch(CONFIG.WEBHOOK_URL, { method: "POST", body });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok) throw new Error(j.error || "Fehler");
+  if (!r.ok || !j.ok) throw new Error(j.error || "error");
   return j;
 }
 
 // ---------- Screens ----------
-function welcome() {
-  $section.textContent = ""; progress(0);
+function welcome(keep = {}) {
+  $section.textContent = ""; progress(0); $lang.hidden = false;
   $app.innerHTML = `
   <div class="stack">
-    <h1>Willkommen!</h1>
-    <p>Schön, dass du da bist. Dieser Test dauert etwa <b>30 Minuten</b> und hat drei Teile:</p>
+    <h1>${t("hello")}</h1>
+    <p>${t("intro")}</p>
     <div class="parts">
-      <div class="part"><div class="num">1</div><div><b>Arbeitsstil</b> · ca. 6 Min.<br><span class="muted">Wie du dich selbst siehst. Es gibt kein richtig oder falsch.</span></div></div>
-      <div class="part"><div class="num">2</div><div><b>Denkaufgaben</b> · 15 Min.<br><span class="muted">Zahlen, Sprache, Logik. Die Zeit läuft sichtbar mit.</span></div></div>
-      <div class="part"><div class="num">3</div><div><b>Content &amp; Video</b> · 10 Min.<br><span class="muted">Fragen und kurze Aufgaben aus dem Job.</span></div></div>
+      <div class="part"><div class="num">1</div><div>${t("p1")}<br><span class="muted">${t("p1d")}</span></div></div>
+      <div class="part"><div class="num">2</div><div>${t("p2")}<br><span class="muted">${t("p2d")}</span></div></div>
+      <div class="part"><div class="num">3</div><div>${t("p3")}<br><span class="muted">${t("p3d")}</span></div></div>
     </div>
-    <div class="warnbox">Bitte leg dein Handy weg und bleib in diesem Fenster. <b>Jedes Verlassen des Testfensters wird registriert und mitgeschickt.</b> Hilfsmittel wie Suche oder ChatGPT sind nicht erlaubt. Einmal beantwortete Fragen kannst du nicht mehr ändern.</div>
+    <div class="warnbox">${t("rules")}</div>
     <div class="card stack">
-      <div><label class="f" for="name">Dein Name</label><input id="name" type="text" autocomplete="off" maxlength="120"></div>
-      <div><label class="f" for="email">E-Mail <span class="muted">(optional)</span></label><input id="email" type="email" autocomplete="off" maxlength="200"></div>
-      <div><label class="f" for="code">Test-Code <span class="muted">(bekommst du von uns)</span></label><input id="code" type="password" autocomplete="off"></div>
-      <label class="check"><input id="consent" type="checkbox"><span>Ich bin einverstanden, dass die AR-Experts GmbH meine Antworten zur Auswahl im Bewerbungsverfahren auswertet und speichert. Die Daten werden nach spätestens 6 Monaten gelöscht. Die Teilnahme ist freiwillig.</span></label>
+      <div><label class="f" for="name">${t("name")}</label><input id="name" type="text" autocomplete="off" maxlength="120" value="${esc(keep.name || "")}"></div>
+      <div><label class="f" for="email">${t("email")} <span class="muted">${t("optional")}</span></label><input id="email" type="email" autocomplete="off" maxlength="200" value="${esc(keep.email || "")}"></div>
+      <label class="check"><input id="consent" type="checkbox"${keep.consent ? " checked" : ""}><span>${t("consent")}</span></label>
       <div class="err" id="err"></div>
-      <button class="btn" id="go">Test starten</button>
+      <button class="btn" id="go">${t("start")}</button>
     </div>
   </div>`;
-  const go = document.getElementById("go");
-  go.onclick = async () => {
-    const name = document.getElementById("name").value.trim();
-    const email = document.getElementById("email").value.trim();
-    const code = document.getElementById("code").value.trim();
-    const consent = document.getElementById("consent").checked;
+  document.getElementById("go").onclick = () => {
+    const name = val("name").trim();
     const err = document.getElementById("err");
-    if (!name) return (err.textContent = "Bitte gib deinen Namen ein.");
-    if (!code && !DEMO_BANK) return (err.textContent = "Bitte gib den Test-Code ein.");
-    if (!consent) return (err.textContent = "Bitte bestätige die Einwilligung.");
-    go.disabled = true; err.textContent = "";
-    try {
-      S.bank = await unlockBank(code);
-      S.code = code; S.name = name; S.email = email;
-      S.data.meta.startedAt = new Date().toISOString();
-      S.data.meta.userAgent = navigator.userAgent;
-      S.t0 = Date.now(); S.running = true;
-      $watch.hidden = false; updateLeave(false);
-      tools();
-    } catch (e) {
-      err.textContent = "Der Code stimmt nicht.";
-      go.disabled = false;
-    }
+    if (!name) return (err.textContent = t("needName"));
+    if (!document.getElementById("consent").checked) return (err.textContent = t("needConsent"));
+    S.bank = BANKS[LANG];
+    S.name = name; S.email = val("email").trim();
+    S.data.meta.lang = LANG;
+    S.data.meta.startedAt = new Date().toISOString();
+    S.data.meta.userAgent = navigator.userAgent;
+    S.t0 = Date.now(); S.running = true;
+    $lang.hidden = true;
+    $watch.hidden = false; updateLeave(false);
+    tools();
   };
 }
 
 function tools() {
-  $section.textContent = "Vorab"; progress(0.02);
-  const levels = ["nie", "Grundl.", "sicher", "Profi"];
+  $section.textContent = t("pre"); progress(0.02);
+  const levels = t("levels");
   $app.innerHTML = `
-  <span class="pill">Vorab · 1 Minute</span>
-  <h2>Wie gut kennst du diese Tools?</h2>
+  <span class="pill">${t("preMin")}</span>
+  <h2>${t("toolsQ")}</h2>
   <div id="tl"></div>
-  <div class="row"><span></span><button class="btn" id="next">Weiter zu Teil 1</button></div>`;
+  <div class="row"><span></span><button class="btn" id="next">${t("toPart1")}</button></div>`;
   const tl = document.getElementById("tl");
-  S.bank.tools.forEach((t) => {
-    S.data.tools[t] = 0;
+  S.bank.tools.forEach((tool) => {
+    S.data.tools[tool] = 0;
     const row = document.createElement("div");
     row.className = "tool";
-    row.innerHTML = `<div>${esc(t)}</div><div class="seg">${levels.map((l, i) => `<button data-v="${i}" class="${i === 0 ? "on" : ""}">${l}</button>`).join("")}</div>`;
+    row.innerHTML = `<div>${esc(tool)}</div><div class="seg">${levels.map((l, i) => `<button data-v="${i}" class="${i === 0 ? "on" : ""}">${l}</button>`).join("")}</div>`;
     row.querySelectorAll("button").forEach((b) => b.onclick = () => {
       row.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
-      b.classList.add("on"); S.data.tools[t] = +b.dataset.v;
+      b.classList.add("on"); S.data.tools[tool] = +b.dataset.v;
     });
     tl.appendChild(row);
   });
@@ -269,15 +354,12 @@ function tools() {
 
 // ---------- Teil 1: DISC ----------
 function discIntro() {
-  $section.textContent = "Teil 1 von 3";
+  $section.textContent = t("partOf")(1);
   $app.innerHTML = `
-  <span class="pill">Teil 1 · Arbeitsstil</span>
-  <h2>So funktioniert's</h2>
-  <p>Du siehst 24 Mal vier Eigenschaften. Pro Runde tippst du zwei Mal:</p>
-  <ul><li>zuerst auf das Wort, das <b>am meisten</b> zu dir passt,</li><li>dann auf das Wort, das <b>am wenigsten</b> zu dir passt.</li></ul>
-  <p>Oft passen mehrere oder keins so richtig. Das ist gewollt – nimm einfach das, was am ehesten stimmt.</p>
-  <p>Denk an dich bei der Arbeit. Nicht lange überlegen, der erste Impuls ist meistens der richtige. Es gibt kein richtig oder falsch.</p>
-  <div class="row"><span class="muted">Ohne Zeitlimit, ca. 6 Minuten</span><button class="btn" id="go">Los geht's</button></div>`;
+  <span class="pill">${t("discPill")}</span>
+  <h2>${t("how")}</h2>
+  ${t("discIntro")}
+  <div class="row"><span class="muted">${t("noLimit")}</span><button class="btn" id="go">${t("letsGo")}</button></div>`;
   document.getElementById("go").onclick = () => { sectionStart("disc"); discItem(0); };
 }
 
@@ -291,16 +373,14 @@ function discItem(i) {
     progress(0.04 + 0.3 * ((i + (sel.most === null ? 0 : 0.5)) / blocks.length));
     const step = sel.most === null ? "most" : "least";
     $app.innerHTML = `
-    <span class="pill">Teil 1 · ${i + 1} von ${blocks.length}</span>
-    <h2>${step === "most"
-      ? `Welches Wort passt <u>am meisten</u> zu dir?`
-      : `Und welches passt <u>am wenigsten</u> zu dir?`}</h2>
-    <p class="muted" style="margin-top:-6px">${step === "most" ? "Schritt 1 von 2 · denk an dich bei der Arbeit" : "Schritt 2 von 2"}</p>
+    <span class="pill">${t("part")(1)} · ${i + 1} ${t("of")} ${blocks.length}</span>
+    <h2>${step === "most" ? t("most") : t("least")}</h2>
+    <p class="muted" style="margin-top:-6px">${step === "most" ? t("step1") : t("step2")}</p>
     <div id="opts">${order.map((k) => {
-      if (k === sel.most) return `<button class="opt sel" disabled style="opacity:.7">✓ ${esc(b.words[k])} <span class="muted">· am meisten</span></button>`;
+      if (k === sel.most) return `<button class="opt sel" disabled style="opacity:.7">✓ ${esc(b.words[k])} <span class="muted">· ${t("mostTag")}</span></button>`;
       return `<button class="opt" data-k="${k}">${esc(b.words[k])}</button>`;
     }).join("")}</div>
-    <div class="row">${step === "least" ? `<button class="btn ghost" id="back">Zurück</button>` : "<span></span>"}<span class="muted">Tippen genügt</span></div>`;
+    <div class="row">${step === "least" ? `<button class="btn ghost" id="back">${t("back")}</button>` : "<span></span>"}<span class="muted">${t("tap")}</span></div>`;
     document.querySelectorAll(".opt[data-k]").forEach((el) => el.onclick = () => {
       const k = +el.dataset.k;
       if (step === "most") { sel.most = k; draw(); }
@@ -314,65 +394,55 @@ function discItem(i) {
 
 // ---------- Teil 2: Denkaufgaben ----------
 function cogIntro() {
-  $section.textContent = "Teil 2 von 3"; progress(0.35);
+  $section.textContent = t("partOf")(2); progress(0.35);
   $app.innerHTML = `
-  <span class="pill">Teil 2 · Denkaufgaben</span>
-  <h2>20 Aufgaben in 15 Minuten</h2>
-  <ul>
-    <li>Zahlenreihen, Sprache, Logik und etwas Rechnen.</li>
-    <li>Kopfrechnen reicht. Kein Taschenrechner, kein Handy.</li>
-    <li>Du kannst eine Aufgabe überspringen, aber nicht zurückgehen.</li>
-    <li>Nicht jeder schafft alles. Wenn du hängst: lieber raten oder weiter.</li>
-    <li>Wenn die Zeit abläuft, geht es automatisch mit Teil 3 weiter.</li>
-  </ul>
-  <div class="row"><span class="muted">Die Zeit startet mit dem Klick.</span><button class="btn" id="go">Zeit starten</button></div>`;
+  <span class="pill">${t("cogPill")}</span>
+  <h2>${t("cogH")}</h2>
+  <ul>${t("cogRules").map((r) => `<li>${r}</li>`).join("")}</ul>
+  <div class="row"><span class="muted">${t("clockHint")}</span><button class="btn" id="go">${t("startClock")}</button></div>`;
   document.getElementById("go").onclick = () => {
     sectionStart("cog");
     S.cogDone = false;
     startTimer(CONFIG.COG_SECONDS, () => { if (!S.cogDone) { S.data.meta.timedOut.cog = true; finishCog(); } });
-    mcItem(S.bank.cog, 0, "cog", "Teil 2", 0.35, 0.35, finishCog);
+    mcItem(S.bank.cog, 0, "cog", 2, 0.35, 0.35, finishCog);
   };
 }
 function finishCog() { if (S.cogDone) return; S.cogDone = true; stopTimer(); sectionEnd(); contentIntro(); }
 
-function mcItem(items, i, key, label, p0, pw, onDone) {
+function mcItem(items, i, key, partNo, p0, pw, onDone) {
   if (i >= items.length) return onDone();
   progress(p0 + pw * (i / items.length));
   const it = items[i];
   const shown = Date.now();
   let pick = null;
   $app.innerHTML = `
-  <span class="pill">${label} · ${i + 1} von ${items.length}</span>
+  <span class="pill">${t("part")(partNo)} · ${i + 1} ${t("of")} ${items.length}</span>
   <h2>${esc(it.q)}</h2>
   <div id="opts">${it.options.map((o, k) => `<button class="opt" data-k="${k}">${esc(o)}</button>`).join("")}</div>
-  <div class="row"><button class="btn ghost" id="skip">Überspringen</button><button class="btn" id="next" disabled>Weiter</button></div>`;
+  <div class="row"><button class="btn ghost" id="skip">${t("skip")}</button><button class="btn" id="next" disabled>${t("next")}</button></div>`;
   const next = document.getElementById("next");
   document.querySelectorAll(".opt").forEach((b) => b.onclick = () => {
     document.querySelectorAll(".opt").forEach((x) => x.classList.remove("sel"));
     b.classList.add("sel"); pick = +b.dataset.k; next.disabled = false;
   });
-  const save = (a) => { S.data[key][it.id] = { a, ms: Date.now() - shown }; mcItem(items, i + 1, key, label, p0, pw, onDone); };
+  const save = (a) => { S.data[key][it.id] = { a, ms: Date.now() - shown }; mcItem(items, i + 1, key, partNo, p0, pw, onDone); };
   next.onclick = () => save(pick);
   document.getElementById("skip").onclick = () => save(null);
 }
 
 // ---------- Teil 3: Content & Video ----------
 function contentIntro() {
-  $section.textContent = "Teil 3 von 3"; progress(0.7);
+  $section.textContent = t("partOf")(3); progress(0.7);
   $app.innerHTML = `
-  <span class="pill">Teil 3 · Content &amp; Video</span>
-  <h2>${S.bank.contentMc.length} kurze Fragen und ${S.bank.contentOpen.length} kleine Aufgaben · 10 Minuten</h2>
-  <ul>
-    <li>Erst Auswahlfragen, dann drei Aufgaben mit eigenem Text.</li>
-    <li>Bei den Aufgaben zählen deine Ideen, nicht schöne Sätze. Stichpunkte sind völlig okay.</li>
-    <li>Plan für die Textaufgaben mindestens 6 Minuten ein.</li>
-  </ul>
-  <div class="row"><span class="muted">Die Zeit startet mit dem Klick.</span><button class="btn" id="go">Zeit starten</button></div>`;
+  <span class="pill">${t("contentPill")}</span>
+  <h2>${t("contentH")(S.bank.contentMc.length, S.bank.contentOpen.length)}</h2>
+  <ul>${t("contentRules").map((r) => `<li>${r}</li>`).join("")}</ul>
+  <div class="row"><span class="muted">${t("clockHint")}</span><button class="btn" id="go">${t("startClock")}</button></div>`;
   document.getElementById("go").onclick = () => {
     sectionStart("content");
     S.contentDone = false;
     startTimer(CONFIG.CONTENT_SECONDS, () => { if (!S.contentDone) { S.data.meta.timedOut.content = true; saveOpen(); finishAll(); } });
-    mcItem(S.bank.contentMc, 0, "contentMc", "Teil 3", 0.7, 0.15, () => openItem(0));
+    mcItem(S.bank.contentMc, 0, "contentMc", 3, 0.7, 0.15, () => openItem(0));
   };
 }
 
@@ -384,10 +454,10 @@ function openItem(i) {
   progress(0.85 + 0.13 * (i / items.length));
   const it = items[i];
   $app.innerHTML = `
-  <span class="pill">Teil 3 · Aufgabe ${i + 1} von ${items.length}</span>
+  <span class="pill">${t("task")(i + 1, items.length)}</span>
   <h2 class="open">${esc(it.q)}</h2>
   <textarea id="t" placeholder="${esc(it.hint)}" spellcheck="false"></textarea>
-  <div class="row"><span class="muted">${esc(it.hint)}</span><button class="btn" id="next">${i + 1 === items.length ? "Test abschließen" : "Weiter"}</button></div>`;
+  <div class="row"><span class="muted">${esc(it.hint)}</span><button class="btn" id="next">${i + 1 === items.length ? t("finish") : t("next")}</button></div>`;
   const el = document.getElementById("t");
   curOpen = { id: it.id, el };
   el.focus();
@@ -400,18 +470,19 @@ async function finishAll() {
   S.data.meta.finishedAt = new Date().toLocaleString("de-DE", { timeZone: "Europe/Berlin" });
   S.data.meta.sectionMs.total = Date.now() - S.t0;
   $section.textContent = ""; progress(1);
-  $app.innerHTML = `<div class="done"><p>Wird gespeichert …</p></div>`;
+  $app.innerHTML = `<div class="done"><p>${t("saving")}</p></div>`;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       await submit();
-      $app.innerHTML = `<div class="done"><div class="big">✓</div><h1>Geschafft, danke!</h1><p>Deine Antworten sind angekommen.<br>Gib uns kurz Bescheid, dass du fertig bist.</p></div>`;
+      $app.innerHTML = `<div class="done"><div class="big">✓</div><h1>${t("doneH")}</h1><p>${t("doneP")}</p></div>`;
       return;
     } catch (e) { await new Promise((r) => setTimeout(r, 1500)); }
   }
-  $app.innerHTML = `<div class="done"><h1>Speichern hat nicht geklappt</h1><p>Bitte schließ das Fenster nicht und gib uns Bescheid.</p><button class="btn" id="retry">Nochmal versuchen</button></div>`;
+  $app.innerHTML = `<div class="done"><h1>${t("failH")}</h1><p>${t("failP")}</p><button class="btn" id="retry">${t("retry")}</button></div>`;
   document.getElementById("retry").onclick = () => { S.contentDone = false; S.running = true; finishAll(); };
 }
 
+setLang("de");
 welcome();
 </script>
 </body>
